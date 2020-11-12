@@ -4,72 +4,125 @@ mod flights;
 mod timer;
 mod crud;
 
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Size, widget::{Button, Label, Flex, Align}, WidgetExt};
+use std::io;
 
-const WINDOW_TITLE: &str = "Menu";
-const WINDOW_SIZE: Size = Size::new(250., 300.);
-
-// TEMP uncomment which one to run
+// TEMP CLI because I can't get multiwindows working without modifying the example source
 pub fn main() {
-    // counter::main().expect("launch Failed");
-    // temperature::main().expect("Launch Failed");
-    // flights::main().expect("Launch Failed");
-    // timer::main().expect("Launch Failed");
-    crud::main().expect("Launch Failed");
+    println!("Enter example 1 - 7");
+    println!("1: Counter");
+    println!("2: Temperature Converter");
+    println!("3: Flight Booker");
+    println!("4: Timer");
+    println!("5: CRUD (create, read, update, delete)");
+    println!("6: Circle Drawing");
+    println!("7: Cells");
+
+    let mut input: String = String::new();
+    match io::stdin().read_line(&mut input) {
+        Ok(_) => {
+            println!("{}", input);
+        }
+        Err(error) => println!("Error: {}", error)
+    };
+
+    let v = input.trim().parse::<u32>().expect("please enter a number from 1- 7");
+    match v {
+        1 => {
+            println!("Counter Selected");
+            counter::main().expect("launch Failed");
+        },
+        2 => {
+            println!("Temperature Converter Selected");
+            temperature::main().expect("Launch Failed");
+        },
+        3 => {
+            println!("Flight Booker Selected");
+            flights::main().expect("Launch Failed");
+        },
+        4 => {
+            println!("Timer Selected");
+            timer::main().expect("Launch Failed");
+        },
+        5 => {
+            println!("CRUD Selected");
+            crud::main().expect("Launch Failed");
+        },
+        6 => {
+            println!("Circle drawer Selected");
+            println!("NOT YET IMPLEMENTED");
+        },
+        7 => {
+            println!("Cells Selected");
+            println!("NOT YET IMPLEMENTED");
+        },
+        _ => ()
+    }
 }
 
-// Todo: rename to main once multi-windows are implemented
-fn actual_main() -> Result<(), PlatformError> {
-    let window = WindowDesc::new(build_ui)
-        .window_size(WINDOW_SIZE)
-        .resizable(false)
-        .title(WINDOW_TITLE);
-    AppLauncher::with_window(window)
-        .launch(())?;
-    Ok(())
-}
+// TODO: Druid app launcher
+// use druid::{commands as sys_cmds, AppLauncher, WindowDesc, Widget, PlatformError, DelegateCtx, Target, Command, Env, Size, widget::{Button, Label, Flex, Align}, WidgetExt, AppDelegate, Application};
 
-// TODO: spawn relevant example from press of button -> Refer multiwin example, but don't modify mods
-fn build_ui() -> impl Widget<()> {
-    let layout = Flex::column()
-        .with_child(Label::new("7Guis in Druid"))
-        .with_flex_spacer(1.)
-        .with_child(Button::new("Counter")
-             .on_click(|_, _, _: &_| {
-                 println!("bar");
-             })
-            .expand_width())
-        .with_child(Button::new("Temperature")
-             .on_click(|_, _, _: &_| {
-                 println!("bar");
-             })
-            .expand_width())
-        .with_child(Button::new("Flight Booker")
-             .on_click(|_, _, _: &_| {
-                 println!("bar");
-             })
-            .expand_width())
-        .with_child(Button::new("Timer")
-             .on_click(|_, _, _: &_| {
-                 println!("bar");
-             })
-            .expand_width())
-        .with_child(Button::new("CRUD")
-             .on_click(|_, _, _: &_| {
-                 println!("WIP");
-             })
-            .expand_width())
-        .with_child(Button::new("Circle Drawer")
-             .on_click(|_, _, _: &_| {
-                 println!("WIP");
-             })
-            .expand_width())
-        .with_child(Button::new("Cells")
-             .on_click(|_, _, _: &_| {
-                 println!("WIP");
-             })
-            .expand_width())
-        .padding(20.);
+// const WINDOW_TITLE: &str = "Menu";
+// const WINDOW_SIZE: Size = Size::new(250., 300.);
 
-    Align::centered(layout)
-}
+// fn main() -> Result<(), PlatformError> {
+//     let window = WindowDesc::new(build_ui)
+//         .window_size(WINDOW_SIZE)
+//         .resizable(false)
+//         .title(WINDOW_TITLE);
+//     AppLauncher::with_window(window)
+//         .launch(())?;
+//     Ok(())
+// }
+//
+// fn build_ui() -> impl Widget<()> {
+//     let layout = Flex::column()
+//         .with_child(Label::new("7Guis in Druid"))
+//         .with_flex_spacer(1.)
+//         .with_child(Button::new("Counter")
+//              .on_click(|ctx, _, _: &_| {
+//                  Application::global().quit();
+//                 // let data = counter::AppData::new();
+//                 // let new_win = WindowDesc::new(counter::build_ui)
+//                 //     .title(counter::WINDOW_TITLE)
+//                 //     .resizable(false)
+//                 //     .window_size(counter::WINDOW_SIZE);
+//                 // AppLauncher::with_window(new_win)
+//                 //     .launch(data)
+//                 //     .expect("Launch Failed");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("Temperature")
+//              .on_click(|_, _, _: &_| {
+//                  println!("bar");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("Flight Booker")
+//              .on_click(|_, _, _: &_| {
+//                  println!("bar");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("Timer")
+//              .on_click(|_, _, _: &_| {
+//                  println!("bar");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("CRUD")
+//              .on_click(|_, _, _: &_| {
+//                  println!("WIP");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("Circle Drawer")
+//              .on_click(|_, _, _: &_| {
+//                  println!("WIP");
+//              })
+//             .expand_width())
+//         .with_child(Button::new("Cells")
+//              .on_click(|_, _, _: &_| {
+//                  println!("WIP");
+//              })
+//             .expand_width())
+//         .padding(20.);
+//
+//     Align::centered(layout)
+// }

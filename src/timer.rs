@@ -4,7 +4,6 @@ use druid::{
 };
 use druid::widget::{Button, Label, Flex, Align, ProgressBar, Slider, Controller};
 use std::time::{Duration, Instant};
-use PartialEq;
 
 
 const WINDOW_TITLE: &str = "Timer";
@@ -13,6 +12,18 @@ const MAX_TIME_RANGE: f64 = 30.;
 
 //16ms is around 60fps
 static TIMER_INTERVAL: Duration = Duration::from_millis(16);
+
+
+pub fn main() -> Result<(), PlatformError> {
+    let data = AppData::new();
+    let window = WindowDesc::new(build_ui)
+        .window_size(WINDOW_SIZE)
+        .title(WINDOW_TITLE)
+        .resizable(false);
+    AppLauncher::with_window(window).launch(data)?;
+    Ok(())
+}
+
 
 fn get_time(data: &AppData) -> f64 {
     if data.progress < 1. {
@@ -51,17 +62,6 @@ fn build_ui() -> impl Widget<AppData> {
         .with_flex_spacer(0.05);
 
     Align::centered(layout)
-}
-
-
-pub fn main() -> Result<(), PlatformError> {
-    let data = AppData::new();
-    let window = WindowDesc::new(build_ui)
-        .window_size(WINDOW_SIZE)
-        .title(WINDOW_TITLE)
-        .resizable(false);
-    AppLauncher::with_window(window).launch(data)?;
-    Ok(())
 }
 
 #[derive(Clone, Data, Lens)]
@@ -109,7 +109,6 @@ impl <W: Widget<AppData>> Controller<AppData, W> for TimeControl {
         match event {
             // on start
             Event::WindowConnected => {
-                println!("data intercepted successfully");
                 self.timer_id = ctx.request_timer(TIMER_INTERVAL)
             },
             // This is not precise so we must calculate the actual time

@@ -77,12 +77,18 @@ impl <W: Widget<AppData>> Controller<AppData, W> for FController {
         child.event(ctx, event, data, env);
 
         // intercept the event
-        match event {
-            Event::KeyDown(_) => {
-                f_to_c(data);
-            },
-            _ => () // do nothing for other events
+        if let Event::KeyDown(_) = event {
+            f_to_c(data);
         }
+
+        // Note: For multiple events use:
+
+        // match event {
+        //     Event::KeyDown(_) => {
+        //         f_to_c(data);
+        //     },
+        //     _ => () // do nothing for other events
+        // }
     }
 }
 
@@ -97,16 +103,10 @@ impl <W: Widget<AppData>> Controller<AppData, W> for CController {
         data: &mut AppData,
         env: &Env,
     ) {
-        // pass everything to the child widget
-        // needs to occur before other items are updated beware this method in threaded apps
         child.event(ctx, event, data, env);
 
-        // intercept the event
-        match event {
-            Event::KeyDown(_) => {
-                c_to_f(data);
-            },
-            _ => () // do nothing for other events
+        if let Event::KeyDown(_) = event {
+            c_to_f(data);
         }
     }
 }
@@ -114,17 +114,15 @@ impl <W: Widget<AppData>> Controller<AppData, W> for CController {
 
 //LOGIC
 fn f_to_c(data: &mut AppData) {
-    let f: Result<f64, _> = data.tbox_f.parse();
-    if f.is_ok() {
-        let c: f64 = (f.unwrap() - 32.) * (5. / 9.);
+    if let Ok(v) = data.tbox_f.parse::<f64>() {
+        let c: f64 = (v - 32.) * (5. / 9.);
         data.tbox_c = format!("{:.1}", c)
     }
 }
 
 fn c_to_f(data: &mut AppData) {
-    let c: Result<f64, _> = data.tbox_c.parse();
-    if c.is_ok() {
-        let f: f64 = c.unwrap() * ( 9. /  5.) + 32.;
+    if let Ok(v) = data.tbox_c.parse::<f64>() {
+        let f: f64 = v * ( 9. /  5.) + 32.;
         data.tbox_f = format!("{:.1}", f)
     }
 }

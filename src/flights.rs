@@ -1,7 +1,5 @@
-// debugging is like being the detective for a crime you also committed.
-
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, widget::{Label, TextBox, Flex, Align, Checkbox, Button, Either}, WidgetExt, Color, PaintCtx};
-use druid::widget::SizedBox;
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size,
+            widget::{Label, TextBox, Flex, Align, Checkbox, Button, Either}, WidgetExt};
 
 const WINDOW_TITLE: &str = "Flight booker";
 const WINDOW_SIZE: Size = Size::new(200., 250.);
@@ -9,7 +7,9 @@ const WIDGET_W: f64 = 150.;
 const WIDGET_H: f64 = 25.;
 const SPACING: f64 = 15.;
 
-//TODO: disabled items, dropdown menu
+//TODO:
+// -disabled items (https://github.com/linebender/druid/issues/746),
+// -dropdown menu
 pub fn main() -> Result<(), PlatformError> {
     // model data
     let data = AppData::new();
@@ -25,26 +25,19 @@ pub fn main() -> Result<(), PlatformError> {
     Ok(())
 }
 
-
 fn submit(data: &mut AppData) {
 
     let out_flight = Date::from_str(data.out_flight.as_str());
 
-
     if data.return_flight {
         let in_flight = Date::from_str(data.in_flight.as_str());
-        if in_flight.is_ok() && out_flight.is_ok() {
-            if out_flight.unwrap().is_before(&in_flight.unwrap()) {
+        if in_flight.is_ok() && out_flight.is_ok() && out_flight.unwrap().is_before(&in_flight.unwrap()) {
                 println!("Return flight\nleave: {}\nreturn:{}\n", data.out_flight, data.in_flight);
-            }
         }
-    } else {
-        if out_flight.is_ok() {
+    } else if out_flight.is_ok() {
             println!("One-way flight\nleave: {}\n", data.out_flight);
         }
-    }
 }
-
 
 // define UI
 fn build_ui() -> impl Widget<AppData> {
@@ -52,7 +45,6 @@ fn build_ui() -> impl Widget<AppData> {
     let tbox_return = Either::new(|data, _| data.return_flight,
                                   TextBox::new().fix_size(WIDGET_W, WIDGET_H).lens(AppData::in_flight),{
             Label::new("").fix_size(WIDGET_W, WIDGET_H)
-
                                   }
     );
 
@@ -92,7 +84,6 @@ impl AppData {
             in_flight: default_str.into(),
             in_valid: true,
             out_valid: false
-
         }
     }
 }
