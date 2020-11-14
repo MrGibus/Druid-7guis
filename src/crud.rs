@@ -137,19 +137,17 @@ fn build_ui() -> impl Widget<AppData> {
 
     let btn_update = Button::new("Update")
         .on_click(|_, data: &mut AppData, _| {
-            // check something is selected
-            if data.current.is_some() {
+            if let Some(i) = data.current {
                 let new = format!("{}, {}", data.surname, data.name);
-                data.list[data.current.unwrap()].item = new
+                data.list[i].item = new
             }
         });
 
     let btn_delete = Button::new("Delete")
         .on_click(|_, data: &mut AppData, _| {
-            // check something is selected
-            if data.current.is_some() {
+            if let Some(i) = data.current {
                 //remove the item
-                data.list.remove(data.current.unwrap());
+                data.list.remove(i);
                 data.list = reindex(&data.list);
                 // set the current selection to nothing (could also be nearest element etc.)
                 data.current = None;

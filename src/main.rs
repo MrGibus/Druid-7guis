@@ -3,6 +3,7 @@ mod temperature;
 mod flights;
 mod timer;
 mod crud;
+mod circles;
 
 use std::io;
 
@@ -49,7 +50,7 @@ pub fn main() {
         },
         6 => {
             println!("Circle drawer Selected");
-            println!("NOT YET IMPLEMENTED");
+            circles::main().expect("Launch Failed");
         },
         7 => {
             println!("Cells Selected");
