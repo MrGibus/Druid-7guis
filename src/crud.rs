@@ -108,8 +108,7 @@ fn build_ui() -> impl Widget<AppData> {
 
     let left = Flex::column()
         .with_flex_child(list, 1.)
-        .expand_height()
-        .expand_width()
+        .expand()
         .padding(8.0)
         .background(Color::grey(0.4))
         .border(Color::grey(0.6), 2.0);
@@ -120,8 +119,7 @@ fn build_ui() -> impl Widget<AppData> {
         .with_flex_child(left, 1.)
         .with_spacer(PADDING)
         .with_child(right)
-        .expand_width()
-        .expand_height()
+        .expand()
         .padding(PADDING)
         .border(Color::grey(0.2), 2.0)
         .rounded(5.0);
