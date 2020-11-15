@@ -8,21 +8,27 @@
 [![druid](https://img.shields.io/badge/Druid%20Version-v0.6.0-orange)](https://crates.io/crates/druid)
 
 ###Counter  
+
 ![counter](images/Counter.PNG)
 
-###Temperature
+###Temperature  
+
 ![temperature](images/Temperature.PNG)
 
-###Flight Booker (Unfinished)   
+###Flight Booker (Unfinished)  
+
 ![Flights](images/Flights.PNG)
 
-###Timer
+###Timer  
+
 ![Timer](images/Timer.PNG)
 
-###CRUD
+###CRUD  
+
 ![CRUD](images/CRUD.PNG)
 
-###Circles (WIP)
+###Circles (WIP)  
+
 ![Circles](images/Circles.PNG)
 
-###Cells (Not started)
+###Cells (Not started)  
