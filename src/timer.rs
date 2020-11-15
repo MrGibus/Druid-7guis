@@ -1,3 +1,7 @@
+//! # A Timer application to demonstrate concurrent inputs
+//! it's important to note that std::time should be used for tracking time like any other app
+//! and not the timer provided by druid.
+
 use druid::{
     AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, TimerToken,
     Event, EventCtx, Env,

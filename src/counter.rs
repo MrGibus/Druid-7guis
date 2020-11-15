@@ -1,3 +1,4 @@
+//! # A simple counting application
 
 use druid::{
     AppLauncher, WindowDesc, Widget, PlatformError,

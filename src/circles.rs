@@ -1,22 +1,18 @@
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color};
-use druid::widget::{Flex, Button, MainAxisAlignment, Slider, Label, WidgetId};
-use druid::im::Vector;
-use crate::circles::custom::CanvasData;
+//! # A circle drawing application
+//!
 
-/*
-Examples that may be useful:
-    anim.rs: Has a circle which reacts to a click
-    invalidation.rs: draws circles on a canvas-like widget
-    panels.rs: Has a panel full of circles
-    scroll.rs: To add additional scroll functionality
-*/
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color};
+use druid::widget::prelude::*;
+use druid::widget::{Flex, Button, MainAxisAlignment, Slider, Label, Controller};
+use crate::circles::custom::{CanvasData};
 
 /*
 TODO:
     [x] Layout the widgets including custom canvas widget
     [x] Draw a circle in the canvas on a click
     [x] Make circles selectable
-    [] add a slider to control radius of currently selected -> Lens
+    [X] add a slider to control radius of currently selected
+    [] add a context menu
     [] add the slider to a context menu
     [] add a list of instructions to implement undo and redo functionality
     [] add escape key to set selection to None
@@ -27,6 +23,9 @@ const WINDOW_TITLE: &str = "Circles";
 const WINDOW_SIZE: Size = Size::new(500., 500.);
 const WINDOW_SIZE_MIN: Size = Size::new(250., 250.);
 const PADDING: f64 = 8.;
+
+const MAX_RADIUS: f64 = 100.;
+const MIN_RADIUS: f64 = 5.;
 
 pub fn main()-> Result<(), PlatformError>  {
     let data = AppData::new();
@@ -42,14 +41,14 @@ pub fn main()-> Result<(), PlatformError>  {
 #[derive(Clone, Data, Lens)]
 struct AppData{
     canvas: custom::CanvasData,
-    radius: f64
+    radius: f64,
 }
 
 impl AppData {
     fn new() -> Self {
         AppData {
             canvas: CanvasData::new(),
-            radius: 0.5
+            radius: (MAX_RADIUS + MIN_RADIUS) / 2.,
         }
     }
 }
@@ -61,7 +60,7 @@ fn build_ui() -> impl Widget<AppData> {
         if let Some(i) = d.canvas.selected {
             format!("Current index: {}", i)
         } else {
-            format!("Nothing Selected")
+            "Nothing Selected".to_string()
         }
     });
 
@@ -75,6 +74,12 @@ fn build_ui() -> impl Widget<AppData> {
             println!("REDO!")
             });
 
+    let slider = Slider::new()
+        .with_range(MIN_RADIUS, MAX_RADIUS)
+        .lens(AppData::radius)
+        .controller(RadController);
+
+
     let header = Flex::row()
         .main_axis_alignment(MainAxisAlignment::Center)
         .with_child(index_label)
@@ -83,11 +88,11 @@ fn build_ui() -> impl Widget<AppData> {
         .with_spacer(PADDING * 2.)
         .with_child(btn_redo)
         // TEMP
-        .with_child(Slider::new().lens(AppData::radius));
+        .with_child(slider);
 
     //TODO: Link to the canvas in APPDATA
     // Will no doubt need to box this as I'm anticipating a recursion
-    let canvas = custom::Canvas::new().lens(AppData::canvas);
+    let canvas = custom::Canvas.lens(AppData::canvas);
 
     Flex::column()
         .with_child(header)
@@ -96,16 +101,36 @@ fn build_ui() -> impl Widget<AppData> {
         .padding(PADDING * 2.)
 }
 
+/// This controller is used to update the radius of the current circle
+struct RadController;
+
+impl <W: Widget<AppData>> Controller<AppData, W> for RadController {
+    fn event(
+        &mut self,
+        child: &mut W,
+        ctx: &mut EventCtx,
+        event: &Event,
+        data: &mut AppData,
+        env: &Env,
+    ) {
+        child.event(ctx, event, data, env);
+
+        // REVIEW: Is there a better event or method.
+        if let Event::MouseMove(_) = event {
+            data.canvas.update_radius(data.radius);
+        }
+    }
+}
+
+/// # Custom widgets implemented in this app
 mod custom {
     use super::*;
     use druid::{Point, MouseButton, Size, kurbo};
-    use druid::widget::prelude::*;
     use druid::im::Vector;
 
     const RADIUS: f64 = 25.;
-    const MAX_RADIUS: f64 = 50.;
-    const MIN_RADIUS: f64 = 2.;
 
+    /// Holds individual circle data, only implements Widget<CanvasData>
     #[derive(Clone, Data, Lens)]
     pub struct Circle {
         pos: Point,
@@ -128,7 +153,9 @@ mod custom {
 
         fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &CanvasData, _env: &Env) {}
 
-        fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &CanvasData, _data: &CanvasData, _env: &Env) {}
+        fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &CanvasData, _data: &CanvasData, _env: &Env) {
+            ctx.request_paint()
+        }
 
         fn layout(&mut self, _ctx: &mut LayoutCtx, bc: &BoxConstraints, _data: &CanvasData, _env: &Env) -> Size {
             let dim = self.radius *2.;
@@ -146,10 +173,9 @@ mod custom {
         }
     }
 
-    // This holds the data for the canvas.
-    // This is created in AppData. use a lens on the Canvas widget from Appdata
-    // much like lensing a string to a label
-    // TODO: CurrentItemLens struct and lens trait impl
+    /// This holds the data for the canvas.
+    /// This is created in AppData. use a lens on the Canvas widget from Appdata
+    /// much like lensing a string to a label
     #[derive(Clone, Data, Lens)]
     pub struct CanvasData {
         pub circles: Vector<custom::Circle>,
@@ -159,7 +185,6 @@ mod custom {
     impl CanvasData {
         pub fn new() -> Self {
             CanvasData {
-                // the circles field is scoped to the Canvas widget
                 circles: Vector::new(),
                 selected: None,
             }
@@ -169,14 +194,27 @@ mod custom {
             let v_len = self.circles.len();
             self.circles.push_back(Circle::new(pos, v_len));
         }
+
+        /// This function will update the radius of the currently selected item if it exists.
+        /// It works given an f64 input from 0 to 1 and references the max and min radius
+        /// Use with a custom controller
+        pub fn update_radius(&mut self, radius: f64) {
+            if let Some(i) = self.selected {
+                self.circles[i].radius = radius;
+            }
+        }
     }
 
-    // the fields herein should be deprecated
+    /// The canvas widget requires a lens to CanvasData
+    /// For example:
+    /// ```no_run
+    /// struct AppData{
+    ///     canvas: custom::CanvasData,
+    /// }
+    ///
+    /// let canvas = custom::Canvas.lens(AppData::canvas);
+    /// ```
     pub struct Canvas;
-
-    impl Canvas {
-        pub fn new() -> Self {Canvas}
-    }
 
     impl Widget<CanvasData> for Canvas {
         fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut CanvasData, _env: &Env) {
@@ -198,7 +236,12 @@ mod custom {
                         }
 
                         if let Some((index, _)) = nearest {
-                            data.selected = Some(index);
+                            // Deselect by clicking circle again
+                            if data.selected == Some(index) {
+                                data.selected = None;
+                            } else {
+                                data.selected = Some(index);
+                            }
                         } else {
                             data.selected = None;
                             data.add_circle(e.pos);
@@ -208,7 +251,13 @@ mod custom {
 
                     MouseButton::Right => {
                         //TODO: open a context menu
-                        println!("Current selection = {:?}", data.selected)
+
+                        //TEMP functionality
+                        {
+                            println!("Current selection = {:?}", data.selected);
+                            data.selected = None;
+                        }
+
                     },
                     _ => ()
                 }
@@ -227,11 +276,16 @@ mod custom {
         // no functionality
         fn update(
             &mut self,
-            _ctx: &mut UpdateCtx,
-            _old: &CanvasData,
-            _new: &CanvasData,
-            _env: &Env,
-        ) {}
+            ctx: &mut UpdateCtx,
+            old: &CanvasData,
+            new: &CanvasData,
+            env: &Env,
+        ) {
+            for c in &new.circles {
+                //Can this be done without cloning?
+                c.clone().update(ctx, old, new, env)
+            }
+        }
 
         // sets boundaries
         fn layout(
@@ -257,6 +311,39 @@ mod custom {
             }
         }
     }
+
+
+
+    // Failed Implementation
+    // /// This Lens focuses on the radius of the currently selected circle
+    // pub struct CurrentCircleLens;
+
+    // impl Lens<AppData, f64> for CurrentCircleLens {
+    //     fn with<R, F: FnOnce(&f64) -> R>(&self, data: &AppData, f: F) -> R {
+    //         if let Some(i) = data.canvas.selected {
+    //             let radius = data.canvas.circles[i].radius / (MAX_RADIUS - MIN_RADIUS);
+    //             f(&radius)
+    //         } else {
+    //             f(&data.radius)
+    //         }
+    //     }
+    //
+    //     fn with_mut<R, F: FnOnce(&mut f64) -> R>(&self, data: &mut AppData, f: F) -> R {
+    //         if let Some(i) = data.canvas.selected {
+    //             let mut radius = data.canvas.circles[i].radius / (MAX_RADIUS - MIN_RADIUS);
+    //             f(&mut radius)
+    //         } else {
+    //             f(&mut data.radius)
+    //         }
+    //     }
+    // }
+
+
+    // TODO
+    // enum ActionHistory {
+    //     Creation,
+    //     Adjustment,
+    // }
 }
 
 

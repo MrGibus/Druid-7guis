@@ -1,3 +1,8 @@
+//! # 7GUIs implementation in rust
+//! The details for the project can be found [here](https://eugenkiss.github.io/7guis/tasks/)
+//! Currently a CLI is used to select which interface to show as I can't determine how to use
+//! multi-windows without altering the stand-alone source for each of the modules. -TODO
+
 mod counter;
 mod temperature;
 mod flights;
@@ -7,7 +12,9 @@ mod circles;
 
 use std::io;
 
-// TEMP CLI because I can't get multiwindows working without modifying the example source
+
+// TEMP
+/// Entry point into program
 pub fn main() {
     println!("Enter example 1 - 7");
     println!("1: Counter");

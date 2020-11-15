@@ -1,3 +1,5 @@
+//! # WIP: An application to demonstrate data-validation
+
 use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size,
             widget::{Label, TextBox, Flex, Align, Checkbox, Button, Either}, WidgetExt};
 

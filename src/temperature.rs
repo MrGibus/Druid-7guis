@@ -1,4 +1,4 @@
-// debugging is like being the detective for a crime you also committed.
+//! # An app for converting Celsius to Farenheight and back, to show basic Lenses and controllers
 
 use druid::{AppLauncher, WindowDesc, Widget, PlatformError,
             widget::{Label, TextBox, Flex, Align, Controller},

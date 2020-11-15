@@ -1,3 +1,5 @@
+//! # A more advanced application Create-Read-Update-Delete
+
 use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color, LensExt};
 use druid::widget::{Label, Flex, Align, TextBox, Button, Scroll, List, CrossAxisAlignment, MainAxisAlignment, Either};
 use druid::lens::{self};
