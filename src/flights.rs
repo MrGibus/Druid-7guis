@@ -1,17 +1,25 @@
 //! # WIP: An application to demonstrate data-validation
 
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size,
-            widget::{Label, TextBox, Flex, Align, Checkbox, Button, Either}, WidgetExt};
+//TODO:
+// [] disabled items (https://github.com/linebender/druid/issues/746),
+// [] dropdown menu
 
-const WINDOW_TITLE: &str = "Flight booker";
-const WINDOW_SIZE: Size = Size::new(200., 250.);
-const WIDGET_W: f64 = 150.;
-const WIDGET_H: f64 = 25.;
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, RenderContext,
+            Data, Lens, Size, Key, Color, WidgetExt, LocalizedString};
+use druid::widget::{TextBox, Flex, Checkbox, Button, Painter};
+
+
+/// ## ENV Keys
+/// https://linebender.org/druid/env.html
+
+const TXT_CLR_INVALID: Key<Color> = Key::new("app.txt.clr.invalid");
+const BTN_CLR_DISABLED: Key<Color> = Key::new("app.btn.clr.disabled");
+
+/// ## Constants
+const WINDOW_SIZE: Size = Size::new(250., 225.);
 const SPACING: f64 = 15.;
 
-//TODO:
-// -disabled items (https://github.com/linebender/druid/issues/746),
-// -dropdown menu
+/// ## Entry Point
 pub fn main() -> Result<(), PlatformError> {
     // model data
     let data = AppData::new();
@@ -19,54 +27,57 @@ pub fn main() -> Result<(), PlatformError> {
     // create the window and ui
     let window = WindowDesc::new(build_ui)
         .window_size(WINDOW_SIZE)
-        .title(WINDOW_TITLE)
+        .title(LocalizedString::new("multiwin-demo-window-title")
+            .with_placeholder("Flight booker"))
         .resizable(false);
 
     // link ui and data starts loop
-    AppLauncher::with_window(window).launch(data)?;
+    AppLauncher::with_window(window)
+        // Set environment keys
+        .configure_env(|env, _state| {
+            env.set(TXT_CLR_INVALID, Color::rgb(0.85, 0.05, 0.1));
+            env.set(BTN_CLR_DISABLED, Color::grey(0.5));
+        })
+        .launch(data)?;
     Ok(())
 }
 
-fn submit(data: &mut AppData) {
-
-    let out_flight = Date::from_str(data.out_flight.as_str());
-
-    if data.return_flight {
-        let in_flight = Date::from_str(data.in_flight.as_str());
-        if in_flight.is_ok() && out_flight.is_ok() && out_flight.unwrap().is_before(&in_flight.unwrap()) {
-                println!("Return flight\nleave: {}\nreturn:{}\n", data.out_flight, data.in_flight);
-        }
-    } else if out_flight.is_ok() {
-            println!("One-way flight\nleave: {}\n", data.out_flight);
-        }
-}
-
-// define UI
+/// ## Builder
 fn build_ui() -> impl Widget<AppData> {
+    // FIXME: failed implementation
+    let btn_disabled = Painter::new(|ctx, data: &AppData, env| {
+        let bounds = ctx.size().to_rect();
+        if !data.btn_valid() {
+            ctx.fill(bounds, &env.get(BTN_CLR_DISABLED))
+        }
+    });
 
-    let tbox_return = Either::new(|data, _| data.return_flight,
-                                  TextBox::new().fix_size(WIDGET_W, WIDGET_H).lens(AppData::in_flight),{
-            Label::new("").fix_size(WIDGET_W, WIDGET_H)
-                                  }
-    );
+    let tbox_out = TextBox::new()
+        .expand_width()
+        .lens(AppData::out_flight);
+
+    let tbox_return = TextBox::new()
+        .expand_width()
+        .lens(AppData::in_flight);
 
     let btn_book = Button::new("Book")
-        .fix_size(WIDGET_W, WIDGET_H)
+        .expand_width()
+        .background(btn_disabled)
         .on_click(|_, data: &mut AppData, _: &_| submit(data));
 
-    let layout = Flex::column()
+    Flex::column()
         .with_child(Checkbox::new("Return").lens(AppData::return_flight))
         .with_spacer(SPACING)
-        .with_child(TextBox::new().fix_size(WIDGET_W, WIDGET_H).lens(AppData::out_flight))
+        .with_child(tbox_out)
         .with_spacer(SPACING)
         .with_child(tbox_return)
-        .with_spacer(SPACING * 2.)
-        .with_child(btn_book);
-
-    Align::centered(layout)
+        .with_flex_spacer(1.)
+        .with_child(btn_book)
+        .padding(SPACING)
 }
 
 
+/// ## App State
 #[derive(Clone, Data, Lens)]
 struct AppData {
     return_flight: bool,
@@ -88,8 +99,32 @@ impl AppData {
             out_valid: false
         }
     }
+
+    fn btn_valid(&self) -> bool {
+        if self.return_flight {
+            self.in_valid && self.out_valid
+        } else {
+            self.in_valid
+        }
+    }
 }
 
+
+/// ## Application Logic
+
+fn submit(data: &mut AppData) {
+
+    let out_flight = Date::from_str(data.out_flight.as_str());
+
+    if data.return_flight {
+        let in_flight = Date::from_str(data.in_flight.as_str());
+        if in_flight.is_ok() && out_flight.is_ok() && out_flight.unwrap().is_before(&in_flight.unwrap()) {
+                println!("Return flight\nleave: {}\nreturn:{}\n", data.out_flight, data.in_flight);
+        }
+    } else if out_flight.is_ok() {
+            println!("One-way flight\nleave: {}\n", data.out_flight);
+        }
+}
 
 struct Date {
     day: u16,
