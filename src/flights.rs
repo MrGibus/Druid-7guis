@@ -2,11 +2,11 @@
 
 //TODO:
 // [] disabled items (https://github.com/linebender/druid/issues/746),
+// [] Enum for checking the state of textbox widgets: std, disabled, invalid
 // [] dropdown menu
 
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, RenderContext,
-            Data, Lens, Size, Key, Color, WidgetExt, LocalizedString};
-use druid::widget::{TextBox, Flex, Checkbox, Button, Painter};
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, RenderContext, Data, Lens, Size, Key, Color, WidgetExt, LocalizedString, Env, UpdateCtx};
+use druid::widget::{TextBox, Flex, Checkbox, Button, Painter, Controller};
 
 
 /// ## ENV Keys
@@ -44,17 +44,15 @@ pub fn main() -> Result<(), PlatformError> {
 
 /// ## Builder
 fn build_ui() -> impl Widget<AppData> {
-    // FIXME: failed implementation
-    let btn_disabled = Painter::new(|ctx, data: &AppData, env| {
-        let bounds = ctx.size().to_rect();
-        if !data.btn_valid() {
-            ctx.fill(bounds, &env.get(BTN_CLR_DISABLED))
-        }
-    });
 
     let tbox_out = TextBox::new()
         .expand_width()
         .lens(AppData::out_flight);
+        // .env_scope(|env,data: &AppData| {
+        //     if !data.out_valid {
+        //         env.set(druid::theme::LABEL_COLOR, env.get(TXT_CLR_INVALID));
+        //     }
+        // });
 
     let tbox_return = TextBox::new()
         .expand_width()
@@ -62,8 +60,21 @@ fn build_ui() -> impl Widget<AppData> {
 
     let btn_book = Button::new("Book")
         .expand_width()
-        .background(btn_disabled)
-        .on_click(|_, data: &mut AppData, _: &_| submit(data));
+        .on_click(|_, data: &mut AppData, _: &_| submit(data))
+        .controller(BtnController)
+        .env_scope(|env,data: &AppData| {
+            if data.btn_valid() {
+                env.set(druid::theme::BUTTON_DARK, env.get(druid::theme::BUTTON_DARK));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(druid::theme::BUTTON_LIGHT));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_LIGHT));
+                env.set(druid::theme::LABEL_COLOR, env.get(druid::theme::LABEL_COLOR));
+            } else {
+                env.set(druid::theme::BUTTON_DARK, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_DARK));
+                env.set(druid::theme::LABEL_COLOR, Color::grey(0.7));
+            }
+        });
 
     Flex::column()
         .with_child(Checkbox::new("Return").lens(AppData::return_flight))
@@ -109,6 +120,25 @@ impl AppData {
     }
 }
 
+/// ## Widget extensions
+// Revise the update mehthod of the widget to tell it to redraw once the validity has changed
+struct BtnController;
+
+impl <W: Widget<AppData>> Controller<AppData, W> for BtnController {
+    fn update(
+        &mut self,
+        child: &mut W,
+        ctx: &mut UpdateCtx,
+        old: &AppData,
+        data: &AppData,
+        env: &Env
+    ) {
+        if old.btn_valid() != data.btn_valid() {
+            ctx.request_paint()
+        };
+        child.update(ctx, old, data, env);
+    }
+}
 
 /// ## Application Logic
 
