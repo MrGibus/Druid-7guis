@@ -1,12 +1,10 @@
-//! # WIP: An application to demonstrate data-validation
+//! # An application to demonstrate data-validation
+//! There are no drop-down widgets implemented at this stage. A checkbox has been substituted.
+//! Custom widget functionality is explored elsewhere.
 
-//TODO:
-// [] disabled items (https://github.com/linebender/druid/issues/746),
-// [] Enum for checking the state of textbox widgets: std, disabled, invalid
-// [] dropdown menu
-
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, RenderContext, Data, Lens, Size, Key, Color, WidgetExt, LocalizedString, Env, UpdateCtx};
-use druid::widget::{TextBox, Flex, Checkbox, Button, Painter, Controller};
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size,
+            Key, Color, WidgetExt, LocalizedString, Env, UpdateCtx, EventCtx, Event};
+use druid::widget::{TextBox, Flex, Checkbox, Button, Controller};
 
 
 /// ## ENV Keys
@@ -44,24 +42,32 @@ pub fn main() -> Result<(), PlatformError> {
 
 /// ## Builder
 fn build_ui() -> impl Widget<AppData> {
-
     let tbox_out = TextBox::new()
         .expand_width()
-        .lens(AppData::out_flight);
-        // .env_scope(|env,data: &AppData| {
-        //     if !data.out_valid {
-        //         env.set(druid::theme::LABEL_COLOR, env.get(TXT_CLR_INVALID));
-        //     }
-        // });
+        .lens(AppData::out_flight)
+        .controller(TboxControl)
+        .env_scope(|env,data: &AppData| {
+            match data.out_state {
+                TboxState::Standard => env.set(druid::theme::LABEL_COLOR, env.get(druid::theme::LABEL_COLOR)),
+                TboxState::Invalid => env.set(druid::theme::LABEL_COLOR, env.get(TXT_CLR_INVALID)),
+                TboxState::Disabled => env.set(druid::theme::LABEL_COLOR, env.get(BTN_CLR_DISABLED)),
+            }
+        });
 
     let tbox_return = TextBox::new()
         .expand_width()
-        .lens(AppData::in_flight);
+        .lens(AppData::in_flight)
+        .controller(TboxControl)
+        .env_scope(|env,data: &AppData| {
+            match data.in_state {
+                TboxState::Standard => env.set(druid::theme::LABEL_COLOR, env.get(druid::theme::LABEL_COLOR)),
+                TboxState::Invalid => env.set(druid::theme::LABEL_COLOR, env.get(TXT_CLR_INVALID)),
+                TboxState::Disabled => env.set(druid::theme::LABEL_COLOR, env.get(BTN_CLR_DISABLED)),
+            }
+        });
 
     let btn_book = Button::new("Book")
         .expand_width()
-        .on_click(|_, data: &mut AppData, _: &_| submit(data))
-        .controller(BtnController)
         .env_scope(|env,data: &AppData| {
             if data.btn_valid() {
                 env.set(druid::theme::BUTTON_DARK, env.get(druid::theme::BUTTON_DARK));
@@ -74,10 +80,17 @@ fn build_ui() -> impl Widget<AppData> {
                 env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_DARK));
                 env.set(druid::theme::LABEL_COLOR, Color::grey(0.7));
             }
-        });
+        })
+        .on_click(|_, data: &mut AppData, _: &_| submit(data))
+        .controller(BtnController);
+
+    let chk_box = Checkbox::new("Return")
+        .lens(AppData::return_flight)
+        .controller(CBoxController);
+
 
     Flex::column()
-        .with_child(Checkbox::new("Return").lens(AppData::return_flight))
+        .with_child(chk_box)
         .with_spacer(SPACING)
         .with_child(tbox_out)
         .with_spacer(SPACING)
@@ -87,41 +100,79 @@ fn build_ui() -> impl Widget<AppData> {
         .padding(SPACING)
 }
 
+#[derive(Clone, Data, PartialEq, Debug)]
+enum TboxState {
+    Standard,
+    Invalid,
+    Disabled,
+}
+
 
 /// ## App State
-#[derive(Clone, Data, Lens)]
+#[derive(Clone, Data, Lens, Debug)]
 struct AppData {
     return_flight: bool,
     out_flight: String,
     in_flight: String,
-    out_valid: bool,
-    in_valid: bool,
+    out_state: TboxState,
+    in_state: TboxState,
 }
 
 impl AppData {
     fn new() -> AppData {
-        let default_str = "27.03.2014";
 
         AppData {
             return_flight: false,
-            out_flight: default_str.into(),
-            in_flight: default_str.into(),
-            in_valid: true,
-            out_valid: false
+            out_flight: "27.03.2021".into(),
+            in_flight: "14.04.2021".into(),
+            out_state: TboxState::Standard,
+            in_state: TboxState::Disabled,
         }
     }
 
     fn btn_valid(&self) -> bool {
         if self.return_flight {
-            self.in_valid && self.out_valid
+            self.in_state == TboxState::Standard && self.out_state == TboxState::Standard
         } else {
-            self.in_valid
+            self.out_state == TboxState::Standard
+        }
+    }
+
+    // To update the text box states based on their inputs
+    fn update_states(&mut self) {
+        let out_date = Date::from_str(self.out_flight.as_str());
+        let in_date = Date::from_str(self.in_flight.as_str());
+
+        // out flight must either be standard or invalid
+        match out_date {
+            Ok(_) => {
+                self.out_state = TboxState::Standard;
+            },
+            Err(_) => self.out_state = TboxState::Invalid,
+        }
+
+        if self.return_flight {
+            match in_date {
+                Ok(date) => {
+                    if out_date.is_ok() && date.is_before(&out_date.unwrap()) {
+                            self.in_state = TboxState::Invalid;
+                    } else {
+                        // we don't want to throw an error here if out flight is invalid
+                        self.in_state = TboxState::Standard;
+                    }
+                },
+                Err(_) => self.in_state = TboxState::Invalid,
+            }
+        }
+        // if not a return flight in state must be disabled
+        else {
+            self.in_state = TboxState::Disabled
         }
     }
 }
 
 /// ## Widget extensions
-// Revise the update mehthod of the widget to tell it to redraw once the validity has changed
+
 struct BtnController;
 
 impl <W: Widget<AppData>> Controller<AppData, W> for BtnController {
@@ -133,10 +184,55 @@ impl <W: Widget<AppData>> Controller<AppData, W> for BtnController {
         data: &AppData,
         env: &Env
     ) {
-        if old.btn_valid() != data.btn_valid() {
-            ctx.request_paint()
-        };
         child.update(ctx, old, data, env);
+        // repaint widget everytime data changes
+        ctx.request_paint()
+    }
+}
+
+/// ## Checkbox functionality override:
+/// because lensed data would not been updated until AFTER the controller
+/// we must flip data, request paint and *not* pass the event to the child:
+/// It's expected that this will change with env_scope changes in version 0.7
+struct CBoxController;
+
+impl <W: Widget<AppData>> Controller<AppData, W> for CBoxController {
+    fn event(
+        &mut self,
+        _child: &mut W,
+        ctx: &mut EventCtx,
+        event: &Event,
+        data: &mut AppData,
+        _env: &Env,
+    ) {
+        if let Event::MouseDown(_) = event {
+            data.return_flight = !data.return_flight;
+            data.update_states();
+        }
+        ctx.request_paint();
+    }
+}
+
+/// ## Textbox(s) functionality override:
+/// This is boilerplate to update the state on a keypress
+
+struct TboxControl;
+
+impl <W: Widget<AppData>> Controller<AppData, W> for TboxControl {
+    fn event(
+        &mut self,
+        child: &mut W,
+        ctx: &mut EventCtx,
+        event: &Event,
+        data: &mut AppData,
+        env: &Env,
+    ) {
+        // Pass to child first to save an update block
+        child.event(ctx, event, data, env);
+
+        if let Event::KeyDown(_) = event {
+            data.update_states()
+        }
     }
 }
 
@@ -149,13 +245,15 @@ fn submit(data: &mut AppData) {
     if data.return_flight {
         let in_flight = Date::from_str(data.in_flight.as_str());
         if in_flight.is_ok() && out_flight.is_ok() && out_flight.unwrap().is_before(&in_flight.unwrap()) {
-                println!("Return flight\nleave: {}\nreturn:{}\n", data.out_flight, data.in_flight);
+            println!("Return flight\nleave: {}\nreturn:{}\n", data.out_flight, data.in_flight);
         }
     } else if out_flight.is_ok() {
             println!("One-way flight\nleave: {}\n", data.out_flight);
         }
 }
 
+/// could also implement a datetime library, but given our needs we will just make our own
+/// with the minimal functionality needed to demonstrate UI requirements
 struct Date {
     day: u16,
     month: u16,
@@ -169,15 +267,27 @@ impl Date {
         // split via '.' character and map to a vector
         let vect: Vec<String> = input.split('.').map(|s| s.to_string()).collect();
 
-        let day: u16 = vect[0].parse()?;
-        let month: u16 = vect[1].parse()?;
-        let year: u16 = vect[2].parse()?;
+        // Use .get to verify position exists
+        let v_day = vect.get(0);
+        let v_month = vect.get(1);
+        let v_year = vect.get(2);
 
-        Ok(Date {
-            day,
-            month,
-            year,
-        })
+        // If all of the items exist, then parse and return the result
+        if v_year.is_some() && v_month.is_some() && v_day.is_some() {
+            let day: u16 = v_day.unwrap().parse()?;
+            let month: u16 = v_month.unwrap().parse()?;
+            let year: u16 = v_year.unwrap().parse()?;
+
+            Ok(Date {
+                day,
+                month,
+                year,
+            })
+
+        } // Otherwise return a read error
+        else {
+            Err("read error: Enter full date".into())
+        }
     }
 
     fn is_after(&self, other: &Date) -> bool {
