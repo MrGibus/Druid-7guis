@@ -15,7 +15,7 @@
 
 ![temperature](images/Temperature.PNG)
 
-### Flight Booker (Unfinished)  
+### Flight Booker
 
 ![Flights](images/Flights.PNG)
 
