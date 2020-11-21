@@ -1,9 +1,11 @@
 //! # A circle drawing application
-//!
 
-use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color};
+use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color,
+            Selector, MenuDesc, MenuItem, LocalizedString, DelegateCtx, Target, Command, KeyCode};
 use druid::widget::prelude::*;
 use druid::widget::{Flex, Button, MainAxisAlignment, Slider, Label, Controller};
+use druid::{ContextMenu, AppDelegate};
+
 use crate::circles::custom::{CanvasData};
 
 /*
@@ -12,17 +14,19 @@ TODO:
     [x] Draw a circle in the canvas on a click
     [x] Make circles selectable
     [X] add a slider to control radius of currently selected
-    [] add a context menu
-    [] add the slider to a context menu
-    [] add a list of instructions to implement undo and redo functionality
-    [] add escape key to set selection to None
-    [] add scroll functionality
+    [X] add a context menu
+    [X] add the slider to a context menu
+    [ ] check that only one pop-up can occur at one time
+    [ ] add a list of instructions to implement undo and redo functionality
+    [?] add escape key to set selection to None -> not working
+    [ ] add scroll functionality
  */
 
 const WINDOW_TITLE: &str = "Circles";
 const WINDOW_SIZE: Size = Size::new(500., 500.);
 const WINDOW_SIZE_MIN: Size = Size::new(250., 250.);
 const PADDING: f64 = 8.;
+const POPUP_SIZE: Size = Size::new(250., 100.);
 
 const MAX_RADIUS: f64 = 100.;
 const MIN_RADIUS: f64 = 5.;
@@ -34,6 +38,7 @@ pub fn main()-> Result<(), PlatformError>  {
         .with_min_size(WINDOW_SIZE_MIN)
         .title(WINDOW_TITLE);
     AppLauncher::with_window(window)
+        .delegate(Delegate{})
         .launch(data)?;
     Ok(())
 }
@@ -55,49 +60,50 @@ impl AppData {
 
 fn build_ui() -> impl Widget<AppData> {
 
-    //TEMP: Linking a widget to canvas data
-    let index_label = Label::new(|d: &AppData, _: &_| {
-        if let Some(i) = d.canvas.selected {
-            format!("Current index: {}", i)
-        } else {
-            "Nothing Selected".to_string()
-        }
-    });
-
     let btn_undo = Button::new("Undo")
         .on_click(|_ctx, _data: &mut AppData, _env| {
-            println!("UNDO!")
+            println!("UNDO!");
             });
 
     let btn_redo = Button::new("Redo")
         .on_click(|_ctx, _data: &mut AppData, _env| {
-            println!("REDO!")
+            println!("REDO!");
             });
-
-    let slider = Slider::new()
-        .with_range(MIN_RADIUS, MAX_RADIUS)
-        .lens(AppData::radius)
-        .controller(RadController);
-
 
     let header = Flex::row()
         .main_axis_alignment(MainAxisAlignment::Center)
-        .with_child(index_label)
-        .with_spacer(PADDING * 3.)
         .with_child(btn_undo)
         .with_spacer(PADDING * 2.)
-        .with_child(btn_redo)
-        // TEMP
-        .with_child(slider);
+        .with_child(btn_redo);
 
-    //TODO: Link to the canvas in APPDATA
-    // Will no doubt need to box this as I'm anticipating a recursion
     let canvas = custom::Canvas.lens(AppData::canvas);
 
     Flex::column()
         .with_child(header)
         .with_spacer(PADDING * 2.)
         .with_flex_child(canvas, 1.)
+        .padding(PADDING * 2.)
+}
+
+fn build_popup() -> impl Widget<AppData> {
+    let lbl = Label::new(|data: &AppData, _: &_| {
+        if let Some(i) = data.canvas.selected {
+            format!("Radius for Circle {} = {:.1}", i, data.radius)
+        } else {
+            "Nothing Selected".to_string()
+        }
+    });
+
+    let slider = Slider::new()
+        .with_range(MIN_RADIUS, MAX_RADIUS)
+        .expand_width()
+        .lens(AppData::radius)
+        .controller(RadController);
+
+    Flex::column()
+        .main_axis_alignment(MainAxisAlignment::Center)
+        .with_flex_child(lbl, 1.)
+        .with_flex_child(slider, 1.)
         .padding(PADDING * 2.)
 }
 
@@ -115,6 +121,7 @@ impl <W: Widget<AppData>> Controller<AppData, W> for RadController {
     ) {
         child.event(ctx, event, data, env);
 
+
         // REVIEW: Is there a better event or method.
         if let Event::MouseMove(_) = event {
             data.canvas.update_radius(data.radius);
@@ -122,7 +129,53 @@ impl <W: Widget<AppData>> Controller<AppData, W> for RadController {
     }
 }
 
-/// # Custom widgets implemented in this app
+/// ## Context Menu
+
+const CVS_CTX_RESIZE: Selector = Selector::new("ctx-menu-resize");
+const CVS_CTX_DESELECT: Selector = Selector::new("ctx-menu-deselect");
+
+/// Context Menu items
+fn build_context<T:Data>() -> MenuDesc<T> {
+    MenuDesc::empty()
+        .append(MenuItem::new(
+            LocalizedString::new("Deselect"),
+            CVS_CTX_DESELECT,
+        ))
+        .append(MenuItem::new(
+            LocalizedString::new("Resize"),
+            CVS_CTX_RESIZE,
+        ))
+}
+
+struct Delegate;
+
+impl AppDelegate<AppData> for Delegate {
+    fn command(
+        &mut self,
+        ctx: &mut DelegateCtx,
+        _target: Target,
+        cmd: &Command,
+        data: &mut AppData,
+        _env: &Env
+    ) -> bool {
+        match cmd {
+            _ if cmd.is(CVS_CTX_DESELECT) => {
+                data.canvas.selected = None;
+                false
+            },
+            _ if cmd.is(CVS_CTX_RESIZE) => {
+                let popup = WindowDesc::new(build_popup)
+                    .window_size(POPUP_SIZE)
+                    .title("resize");
+                ctx.new_window(popup);
+                false
+            },
+            _ => true
+        }
+    }
+}
+
+/// ## Custom widgets implemented in this app
 mod custom {
     use super::*;
     use druid::{Point, MouseButton, Size, kurbo};
@@ -172,6 +225,8 @@ mod custom {
             }
         }
     }
+
+
 
     /// This holds the data for the canvas.
     /// This is created in AppData. use a lens on the Canvas widget from Appdata
@@ -250,17 +305,20 @@ mod custom {
                     },
 
                     MouseButton::Right => {
-                        //TODO: open a context menu
-
-                        //TEMP functionality
-                        {
-                            println!("Current selection = {:?}", data.selected);
-                            data.selected = None;
-                        }
-
+                        let menu = ContextMenu::new(
+                            build_context::<AppData>()
+                            ,e.pos
+                        );
+                        ctx.show_context_menu(menu);
                     },
                     _ => ()
                 }
+            }
+            // FIXME
+            if let Event::KeyDown(e) = event {
+                println!("KEY DOWN! ");
+                if let KeyCode::Escape = e.key_code { data.selected = None }
+
             }
         }
 
@@ -287,6 +345,7 @@ mod custom {
             }
         }
 
+
         // sets boundaries
         fn layout(
             &mut self,
@@ -312,33 +371,6 @@ mod custom {
         }
     }
 
-
-
-    // Failed Implementation
-    // /// This Lens focuses on the radius of the currently selected circle
-    // pub struct CurrentCircleLens;
-
-    // impl Lens<AppData, f64> for CurrentCircleLens {
-    //     fn with<R, F: FnOnce(&f64) -> R>(&self, data: &AppData, f: F) -> R {
-    //         if let Some(i) = data.canvas.selected {
-    //             let radius = data.canvas.circles[i].radius / (MAX_RADIUS - MIN_RADIUS);
-    //             f(&radius)
-    //         } else {
-    //             f(&data.radius)
-    //         }
-    //     }
-    //
-    //     fn with_mut<R, F: FnOnce(&mut f64) -> R>(&self, data: &mut AppData, f: F) -> R {
-    //         if let Some(i) = data.canvas.selected {
-    //             let mut radius = data.canvas.circles[i].radius / (MAX_RADIUS - MIN_RADIUS);
-    //             f(&mut radius)
-    //         } else {
-    //             f(&mut data.radius)
-    //         }
-    //     }
-    // }
-
-
     // TODO
     // enum ActionHistory {
     //     Creation,
@@ -351,6 +383,7 @@ mod custom {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // #[ignore]
     #[test]
     fn test() {
         main().expect("Launch Error")
