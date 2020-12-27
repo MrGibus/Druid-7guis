@@ -1,10 +1,13 @@
 //! # A circle drawing application
+//! This will be revisited at a later date as there's likely a cleaner solution.
+//! The slider from the second window and the circle being drawn is not smooth.
 
 use druid::{AppLauncher, WindowDesc, Widget, PlatformError, Data, Lens, Size, WidgetExt, Color,
             Selector, MenuDesc, MenuItem, LocalizedString, DelegateCtx, Target, Command, KeyCode};
 use druid::widget::prelude::*;
 use druid::widget::{Flex, Button, MainAxisAlignment, Slider, Label, Controller};
-use druid::{ContextMenu, AppDelegate};
+use druid::{ContextMenu, AppDelegate, WindowId, Key};
+use druid::im::Vector;
 
 use crate::circles::custom::{CanvasData};
 
@@ -16,17 +19,31 @@ TODO:
     [X] add a slider to control radius of currently selected
     [X] add a context menu
     [X] add the slider to a context menu
-    [ ] check that only one pop-up can occur at one time
+    [ ] change slider to only affect the circle selected at time window is open, disable enable canvas
+    [X] check that only one pop-up can occur at one time and close on lost focus
     [ ] add a list of instructions to implement undo and redo functionality
-    [?] add escape key to set selection to None -> not working
+    [ ] temp functionality: redo adds an circle to the middle, undo removes it and prints current status
+    [*] Lag issue between multiple windows
+    [X] add escape key to set selection to None
     [ ] add scroll functionality
  */
+
+/**
+*Lag Issue
+Tried to fix Lag issue via commands and target specific window/widget instead of lens
+The lag issue could not be solved, merely linking two windows via one lens lags out the
+other window (works both ways).
+Discussed on Zulip it is not occuring on MacOS, could be a windows issue
+ **/
 
 const WINDOW_TITLE: &str = "Circles";
 const WINDOW_SIZE: Size = Size::new(500., 500.);
 const WINDOW_SIZE_MIN: Size = Size::new(250., 250.);
 const PADDING: f64 = 8.;
 const POPUP_SIZE: Size = Size::new(250., 100.);
+
+const BTN_CLR_DISABLED: Key<Color> = Key::new("app.btn.clr.disabled");
+const BTN_TXT_DISABLED: Key<Color> = Key::new("app.btn.txt.disabled");
 
 const MAX_RADIUS: f64 = 100.;
 const MIN_RADIUS: f64 = 5.;
@@ -38,7 +55,11 @@ pub fn main()-> Result<(), PlatformError>  {
         .with_min_size(WINDOW_SIZE_MIN)
         .title(WINDOW_TITLE);
     AppLauncher::with_window(window)
-        .delegate(Delegate{})
+        .configure_env(|env, _state| {
+            env.set(BTN_TXT_DISABLED, Color::grey(0.7));
+            env.set(BTN_CLR_DISABLED, Color::grey(0.5));
+        })
+        .delegate(Delegate)
         .launch(data)?;
     Ok(())
 }
@@ -47,6 +68,10 @@ pub fn main()-> Result<(), PlatformError>  {
 struct AppData{
     canvas: custom::CanvasData,
     radius: f64,
+    undo_valid: bool,
+    redo_valid: bool,
+    window_count: u32,
+    action_log: ActionLog,
 }
 
 impl AppData {
@@ -54,20 +79,49 @@ impl AppData {
         AppData {
             canvas: CanvasData::new(),
             radius: (MAX_RADIUS + MIN_RADIUS) / 2.,
+            undo_valid: false,
+            redo_valid: false,
+            window_count: 0,
+            action_log: ActionLog::default(),
         }
     }
 }
 
 fn build_ui() -> impl Widget<AppData> {
-
     let btn_undo = Button::new("Undo")
-        .on_click(|_ctx, _data: &mut AppData, _env| {
-            println!("UNDO!");
+        .env_scope(|env,data: &AppData| {
+            if data.undo_valid {
+                env.set(druid::theme::BUTTON_DARK, env.get(druid::theme::BUTTON_DARK));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(druid::theme::BUTTON_LIGHT));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_LIGHT));
+                env.set(druid::theme::LABEL_COLOR, env.get(druid::theme::LABEL_COLOR));
+            } else {
+                env.set(druid::theme::BUTTON_DARK, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_DARK));
+                env.set(druid::theme::LABEL_COLOR, Color::grey(0.7));
+            }
+        })
+        .on_click(|ctx, _data: &mut AppData, _env| {
+            ctx.submit_command(druid::commands::UNDO, Target::Global);
             });
 
     let btn_redo = Button::new("Redo")
-        .on_click(|_ctx, _data: &mut AppData, _env| {
-            println!("REDO!");
+        .env_scope(|env,data: &AppData| {
+            if data.redo_valid {
+                env.set(druid::theme::BUTTON_DARK, env.get(druid::theme::BUTTON_DARK));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(druid::theme::BUTTON_LIGHT));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_LIGHT));
+                env.set(druid::theme::LABEL_COLOR, env.get(druid::theme::LABEL_COLOR));
+            } else {
+                env.set(druid::theme::BUTTON_DARK, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BUTTON_LIGHT, env.get(BTN_CLR_DISABLED));
+                env.set(druid::theme::BORDER_LIGHT, env.get(druid::theme::BORDER_DARK));
+                env.set(druid::theme::LABEL_COLOR, Color::grey(0.7));
+            }
+        })
+        .on_click(|ctx, _data: &mut AppData, _env| {
+            ctx.submit_command(druid::commands::REDO, Target::Global);
             });
 
     let header = Flex::row()
@@ -82,13 +136,15 @@ fn build_ui() -> impl Widget<AppData> {
         .with_child(header)
         .with_spacer(PADDING * 2.)
         .with_flex_child(canvas, 1.)
+        .with_spacer(PADDING * 2.)
         .padding(PADDING * 2.)
 }
 
 fn build_popup() -> impl Widget<AppData> {
+
     let lbl = Label::new(|data: &AppData, _: &_| {
         if let Some(i) = data.canvas.selected {
-            format!("Radius for Circle {} = {:.1}", i, data.radius)
+            format!("Radius for Circle {} = {:.1}", i , data.radius)
         } else {
             "Nothing Selected".to_string()
         }
@@ -121,8 +177,6 @@ impl <W: Widget<AppData>> Controller<AppData, W> for RadController {
     ) {
         child.event(ctx, event, data, env);
 
-
-        // REVIEW: Is there a better event or method.
         if let Event::MouseMove(_) = event {
             data.canvas.update_radius(data.radius);
         }
@@ -163,23 +217,123 @@ impl AppDelegate<AppData> for Delegate {
                 data.canvas.selected = None;
                 false
             },
-            _ if cmd.is(CVS_CTX_RESIZE) => {
+            _ if cmd.is(CVS_CTX_RESIZE) && data.canvas.selected.is_some() && data.window_count == 1 => {
                 let popup = WindowDesc::new(build_popup)
                     .window_size(POPUP_SIZE)
+                    .resizable(false)
                     .title("resize");
                 ctx.new_window(popup);
+                false
+            },
+            _ if cmd.is(druid::commands::UNDO) => {
+                println!("UNDO CMD");
+                false
+            },
+            _ if cmd.is(druid::commands::REDO) => {
+                println!("REDO CMD");
                 false
             },
             _ => true
         }
     }
+
+    fn window_added(
+        &mut self,
+        _id: WindowId,
+        data: &mut AppData,
+        _env: &Env,
+        _ctx: &mut DelegateCtx,
+    ) {
+        data.window_count += 1;
+        if data.window_count > 1 {
+            data.canvas.enabled = false;
+        }
+    }
+
+    fn window_removed(
+        &mut self,
+        _id: WindowId,
+        data: &mut AppData,
+        _env: &Env,
+        _ctx: &mut DelegateCtx,
+    ) {
+        data.window_count -= 1;
+        if data.window_count == 1 {
+            data.canvas.enabled = true;
+        }
+    }
+}
+
+/// # Action History
+/// This manages the undo and redo functionality in the struct
+/// position represents the current location in the list,
+/// if position is None there is nothing to redo, undo from end
+/// max_actions represents the maximum number of items to store before actions are removed
+/// action list is the actual history list
+
+#[derive(Clone, Data)]
+pub struct ActionLog {
+    position: usize,
+    max_actions: usize,
+    action_list: Vector<usize> // TODO: Change to Vector<ActionItem> once implemented
+}
+
+impl ActionLog {
+    /// new creates a new history of specified length
+    pub fn new(max: usize) -> Self {
+        ActionLog {
+            position: 0,
+            /// Maxmimum number of actions the log can store
+            max_actions: max,
+            /// Actual list of actions
+            action_list: Vector::new()
+        }
+    }
+
+    /// default creates a new history with a default max length of 10
+    pub fn default() -> Self {
+        ActionLog::new(10)
+    }
+}
+
+/// The action item stores what action occured and an optional value
+#[derive(Clone, Data)]
+struct ActionItem {
+    action_type: ActionType,
+    radius: Option<f64>,
+    circle_id: usize,
+}
+
+/// implements the creation and adjustment methods
+impl ActionItem {
+    fn creation(circle_id: usize) -> Self {
+        ActionItem {
+            action_type: ActionType::Creation,
+            radius: None,
+            circle_id
+        }
+    }
+
+    fn adjustment(circle_id: usize, radius: f64) -> Self {
+        ActionItem {
+            action_type: ActionType::Adjustment,
+            radius: Some(radius),
+            circle_id
+        }
+    }
+}
+
+/// The action type defines what actions can occur
+#[derive(Clone, Data, PartialEq)]
+enum ActionType {
+    Creation,
+    Adjustment,
 }
 
 /// ## Custom widgets implemented in this app
 mod custom {
     use super::*;
     use druid::{Point, MouseButton, Size, kurbo};
-    use druid::im::Vector;
 
     const RADIUS: f64 = 25.;
 
@@ -235,6 +389,7 @@ mod custom {
     pub struct CanvasData {
         pub circles: Vector<custom::Circle>,
         pub selected: Option<usize>,
+        pub enabled: bool,
     }
 
     impl CanvasData {
@@ -242,6 +397,7 @@ mod custom {
             CanvasData {
                 circles: Vector::new(),
                 selected: None,
+                enabled: true,
             }
         }
 
@@ -258,6 +414,10 @@ mod custom {
                 self.circles[i].radius = radius;
             }
         }
+
+        pub fn update_specific(&mut self, radius: f64, index: usize) {
+            self.circles[index].radius = radius
+        }
     }
 
     /// The canvas widget requires a lens to CanvasData
@@ -273,52 +433,62 @@ mod custom {
 
     impl Widget<CanvasData> for Canvas {
         fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut CanvasData, _env: &Env) {
-            if let Event::MouseDown(e) = event {
-                // TEMP
-                println!("{:?} pressed at {}", e.button , e.pos);
 
-                match e.button {
-                    MouseButton::Left => {
-                        let mut nearest: Option<(usize, f64)> = None;
-                        for c in & data.circles {
-                            let distance = (c.pos - e.pos).hypot();
-                            if distance < c.radius {
-                                println!( "ITEM SELECTED = {}", c.index );
-                                if nearest.is_none() || nearest.unwrap().1 > distance {
-                                    nearest = Some((c.index, distance));
+            // Must request focus to use keyboard widgets
+            ctx.request_focus();
+
+            // straightforward way to disable direct interaction
+            if data.enabled {
+                match event {
+                    Event::MouseDown(e) => {
+                        // println!("{:?} pressed at {}", e.button , e.pos);
+                        // println!("Canvas is enabled: {}", data.enabled);
+
+                        match e.button {
+                            MouseButton::Left => {
+                                let mut nearest: Option<(usize, f64)> = None;
+                                for c in &data.circles {
+                                    let distance = (c.pos - e.pos).hypot();
+                                    if distance < c.radius {
+                                        println!("ITEM SELECTED = {}", c.index);
+                                        if nearest.is_none() || nearest.unwrap().1 > distance {
+                                            nearest = Some((c.index, distance));
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
-                        if let Some((index, _)) = nearest {
-                            // Deselect by clicking circle again
-                            if data.selected == Some(index) {
-                                data.selected = None;
-                            } else {
-                                data.selected = Some(index);
-                            }
-                        } else {
+                                if let Some((index, _)) = nearest {
+                                    // Deselect by clicking circle again
+                                    if data.selected == Some(index) {
+                                        data.selected = None;
+                                    } else {
+                                        data.selected = Some(index);
+                                    }
+                                } else {
+                                    data.selected = None;
+                                    data.add_circle(e.pos);
+                                }
+                                ctx.request_paint()
+                            },
+
+                            MouseButton::Right => {
+                                let menu = ContextMenu::new(
+                                    build_context::<AppData>()
+                                    , e.pos
+                                );
+                                ctx.show_context_menu(menu);
+                            },
+                            _ => ()
+                        }
+                    },
+                    // Deselection through escape
+                    Event::KeyDown(e) => {
+                        if e.key_code == KeyCode::Escape {
                             data.selected = None;
-                            data.add_circle(e.pos);
                         }
-                        ctx.request_paint()
                     },
-
-                    MouseButton::Right => {
-                        let menu = ContextMenu::new(
-                            build_context::<AppData>()
-                            ,e.pos
-                        );
-                        ctx.show_context_menu(menu);
-                    },
-                    _ => ()
+                    _ => (),
                 }
-            }
-            // FIXME
-            if let Event::KeyDown(e) = event {
-                println!("KEY DOWN! ");
-                if let KeyCode::Escape = e.key_code { data.selected = None }
-
             }
         }
 
@@ -345,7 +515,6 @@ mod custom {
             }
         }
 
-
         // sets boundaries
         fn layout(
             &mut self,
@@ -370,19 +539,15 @@ mod custom {
             }
         }
     }
-
-    // TODO
-    // enum ActionHistory {
-    //     Creation,
-    //     Adjustment,
-    // }
 }
 
 
-//TEMP
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     // #[ignore]
     #[test]
     fn test() {
